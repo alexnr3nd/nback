@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>N-Back Dual, Triple e Quad</title>
+<style>
+:root{--bg:#eceef6;--panel:#fff;--ink:#23204a;--soft:#6a6890;--line:#c9cde3;--acc:#5b4bdb;--onacc:#fff;--ok:#1f9d63;--bad:#d6334a}
+@media (prefers-color-scheme:dark){:root{--bg:#171a2b;--panel:#20243b;--ink:#eceefb;--soft:#a1a6cc;--line:#343a5c;--acc:#8b7dff;--onacc:#15122e;--ok:#43c98a;--bad:#ff6b81}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{min-height:100vh;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,"Segoe UI",Roboto,sans-serif;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+main{max-width:520px;margin:0 auto;padding:max(16px,env(safe-area-inset-top)) 16px max(24px,env(safe-area-inset-bottom))}
+h1{font-size:2rem;margin:8px 0 2px;letter-spacing:-.02em}
+h2{font-size:1rem;margin:20px 0 8px}
+p{margin:4px 0}.sub,.hint{color:var(--soft)}
+button{font:inherit;color:inherit;cursor:pointer;border:2px solid var(--line);background:var(--panel);border-radius:12px;padding:10px 14px;font-weight:600}
+button.primary{background:var(--acc);border-color:var(--acc);color:var(--onacc);width:100%;padding:14px;font-size:1.1rem;margin-top:20px}
+button.ghost{background:transparent}
+button[aria-checked=true],button.on{background:var(--acc);border-color:var(--acc);color:var(--onacc)}
+:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.seg{display:flex;gap:8px}.seg button{flex:1}
+.lv{display:grid;grid-template-columns:repeat(9,1fr);gap:6px}.lv button{padding:10px 0}
+.opt{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:10px 0}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.board{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:8px;width:min(84vw,340px);aspect-ratio:1;margin:22px auto}
+.cell{min-width:0;min-height:0;background:var(--panel);border:2px solid var(--line);border-radius:12px;display:flex;align-items:center;justify-content:center;color:var(--soft);font-size:1.6rem}
+.stim{display:block;width:76%;height:76%}
+.resp{display:grid;gap:8px}
+.r{display:flex;align-items:center;justify-content:center;min-height:88px;background:#000;border-color:#000;color:#fff;padding:8px}
+.r svg{width:46px;height:46px}
+.r.ok{background:var(--ok);border-color:var(--ok)}
+.r.bad{background:var(--bad);border-color:var(--bad)}
+.legend{display:flex;gap:8px;margin:10px 0}.legend span{background:#000;color:#fff;border-radius:10px;padding:6px}.legend svg{width:30px;height:30px;display:block}
+.bar{height:6px;background:var(--line);border-radius:9px;overflow:hidden;margin-top:14px}.bar i{display:block;height:100%;background:var(--acc);width:0}
+.big{font-size:4.5rem;font-weight:800;margin:6px 0;line-height:1}
+table{width:100%;border-collapse:collapse;margin-top:12px}th,td{padding:8px 4px;text-align:right;border-bottom:1px solid var(--line)}th:first-child,td:first-child{text-align:left}
+.btns{display:flex;gap:10px;margin-top:18px}.btns button{flex:1}
+ul{padding-left:18px;margin:6px 0;color:var(--soft)}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script>
+"use strict";
+const $ = s => document.querySelector(s), app = $("#app");
+const COLORS = ["#e5484d", "#3b82f6", "#30a46c", "#f5c518", "#8e4ec6", "#f76b15"];
+const SHAPES = ["circle(50%)", "none", "polygon(50% 0,100% 100%,0 100%)", "polygon(50% 0,100% 50%,50% 100%,0 50%)",
+  "polygon(25% 5%,75% 5%,100% 50%,75% 95%,25% 95%,0 50%)",
+  "polygon(35% 0,65% 0,65% 35%,100% 35%,100% 65%,65% 65%,65% 100%,35% 100%,35% 65%,0 65%,0 35%,35% 35%)"];
+const LETTERS = ["C", "H", "K", "L", "Q", "R", "S", "T"];
+const FREQ = [262, 294, 330, 392, 440, 523, 587, 659];
+const CELLS = [0, 1, 2, 3, 5, 6, 7, 8];
+const SIZE = { pos: 8, snd: 8, col: 6, shp: 6 };
+const LEN = 20;
+let PERIOD = 3000;
+const svg = b => `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${b}</svg>`;
+const ICON = {
+  pos: svg([6, 19, 32].map(y => [6, 19, 32].map(x => `<rect x="${x}" y="${y}" width="10" height="10" rx="2"${x === 32 && y === 6 ? ' fill="currentColor"' : ""}/>`).join("")).join("")),
+  snd: svg('<path d="M5 18h8l10-8v28l-10-8H5z" fill="currentColor"/><path d="M30 17a10 10 0 0 1 0 14"/><path d="M36 11a18 18 0 0 1 0 26"/>'),
+  col: svg('<circle cx="18" cy="19" r="10" fill="#e5484d" stroke="none" opacity=".9"/><circle cx="30" cy="19" r="10" fill="#3b82f6" stroke="none" opacity=".9"/><circle cx="24" cy="30" r="10" fill="#30a46c" stroke="none" opacity=".9"/>'),
+  shp: svg('<rect x="5" y="27" width="16" height="16" rx="2"/><circle cx="35" cy="35" r="8"/><path d="M24 6l10 17H14z"/>')
+};
+const D = { pos: ["pos", "Posição", "A"], snd: ["snd", "Som", "L"], col: ["col", "Cor", "S"], shp: ["shp", "Forma", "D"] };
+const MODS = { dual: [D.pos, D.snd], triple: [D.pos, D.snd, D.col], quad: [D.pos, D.snd, D.col, D.shp] };
+const NAME = { dual: "Dual", triple: "Triple", quad: "Quad" };
+const DESC = { dual: "Dual: posição e som.", triple: "Triple: posição, som e cor.", quad: "Quad: posição, som, cor e forma." };
+const KEY = "nback-offline-v1";
+const def = () => ({ mode: "dual", level: { dual: 1, triple: 1, quad: 1 }, letters: false, hist: [] });
+let mem = null;
+function load() {
+  try {
+    const r = localStorage.getItem(KEY);
+    if (r) { const o = JSON.parse(r), d = def(); return Object.assign(d, o, { level: Object.assign(d.level, o.level) }); }
+  } catch (e) {}
+  return mem || def();
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { mem = JSON.parse(JSON.stringify(S)); } }
+let S = load(), G = null, ac = null;
+if (!MODS[S.mode]) S.mode = "dual";
+
+function makeSeq(mods, n, len) {
+  const seq = Array.from({ length: len }, () => ({}));
+  for (const m of mods) {
+    const el = []; for (let t = n; t < len; t++) el.push(t);
+    for (let i = el.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [el[i], el[j]] = [el[j], el[i]]; }
+    const tg = new Set(el.slice(0, Math.min(el.length, Math.max(3, Math.round(el.length * .3)))));
+    for (let t = 0; t < len; t++) {
+      let v;
+      if (t >= n && tg.has(t)) v = seq[t - n][m];
+      else do v = Math.floor(Math.random() * SIZE[m]); while (t >= n && v === seq[t - n][m]);
+      seq[t][m] = v;
+    }
+  }
+  return seq;
+}
+const isMatch = (t, m) => t >= G.n && G.seq[t][m] === G.seq[t - G.n][m];
+
+function tone(i) {
+  if (!ac) return;
+  const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+  o.frequency.value = FREQ[i];
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.25, t + .02); g.gain.linearRampToValueAtTime(0, t + .45);
+  o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + .5);
+}
+function sound(i) {
+  if (S.letters && "speechSynthesis" in window) {
+    try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(LETTERS[i]); u.lang = "pt-BR"; u.rate = 1.1; speechSynthesis.speak(u); return; } catch (e) {}
+  }
+  tone(i);
+}
+
+function menu() {
+  stopTimers(); G = null;
+  const last = S.hist.filter(h => h.mode === S.mode).slice(-5).reverse();
+  app.innerHTML = `<h1>N-Back</h1>
+  <p class="sub">Aperte quando o estímulo atual for igual ao de N passos atrás. Funciona sem internet.</p>
+  <h2>Modo</h2>
+  <div class="seg" role="radiogroup" aria-label="Modo">${Object.keys(MODS).map(m => `<button role="radio" aria-checked="${S.mode === m}" data-mode="${m}">${NAME[m]}</button>`).join("")}</div>
+  <p class="hint">${DESC[S.mode]}</p>
+  <div class="legend">${MODS[S.mode].map(d => `<span title="${d[1]}">${ICON[d[0]]}</span>`).join("")}</div>
+  <h2>Nível (N)</h2>
+  <div class="lv">${Array.from({ length: 9 }, (_, i) => `<button data-lv="${i + 1}" class="${S.level[S.mode] === i + 1 ? "on" : ""}">${i + 1}</button>`).join("")}</div>
+  <div class="opt"><label for="let">Falar letras (se o aparelho tiver voz offline)</label><input type="checkbox" id="let" ${S.letters ? "checked" : ""}></div>
+  <button class="primary" id="go">Iniciar ${S.level[S.mode]}-back</button>
+  <p class="hint">${LEN} rodadas de ${PERIOD / 1000} s, cerca de 1 minuto. Teclado: ${MODS[S.mode].map(d => d[2] + " " + d[1].toLowerCase()).join(", ")}.</p>
+  ${last.length ? `<h2>Últimas sessões</h2><ul>${last.map(h => `<li>${h.n}-back: ${h.score}%</li>`).join("")}</ul>` : ""}`;
+  app.querySelectorAll("[data-mode]").forEach(b => b.onclick = () => { S.mode = b.dataset.mode; save(); menu(); });
+  app.querySelectorAll("[data-lv]").forEach(b => b.onclick = () => { S.level[S.mode] = +b.dataset.lv; save(); menu(); });
+  $("#let").onchange = e => { S.letters = e.target.checked; save(); };
+  $("#go").onclick = start;
+}
+
+function stopTimers() { if (G) { clearTimeout(G.timer); clearTimeout(G.hide); } try { speechSynthesis.cancel(); } catch (e) {} }
+
+function start() {
+  if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  if (ac && ac.state === "suspended") ac.resume();
+  const defs = MODS[S.mode], mods = defs.map(d => d[0]), n = S.level[S.mode];
+  G = { defs, mods, n, len: LEN, seq: makeSeq(mods, n, LEN), t: -1, press: {}, st: {} };
+  mods.forEach(m => G.st[m] = { h: 0, mi: 0, fa: 0 });
+  app.innerHTML = `<div class="top"><button class="ghost" id="stop">Parar</button><b>${NAME[S.mode]} ${n}-back</b><span id="cnt">0/${LEN}</span></div>
+  <div class="board">${Array.from({ length: 9 }, (_, i) => `<div class="cell" id="c${i}">${i === 4 ? "+" : ""}</div>`).join("")}</div>
+  <div class="resp" style="grid-template-columns:repeat(${mods.length},1fr)">${defs.map(d => `<button class="r" data-m="${d[0]}" aria-label="${d[1]}" title="${d[1]}">${ICON[d[0]]}</button>`).join("")}</div>
+  <div class="bar"><i id="pb"></i></div>`;
+  $("#stop").onclick = menu;
+  app.querySelectorAll(".r").forEach(b => b.onpointerdown = e => { e.preventDefault(); press(b.dataset.m); });
+  next();
+}
+
+function next() {
+  if (!G) return;
+  if (G.t >= 0) for (const m of G.mods) if (!G.press[m] && isMatch(G.t, m)) G.st[m].mi++;
+  G.t++;
+  if (G.t >= G.len) return finish();
+  G.press = {};
+  app.querySelectorAll(".r").forEach(b => b.className = "r");
+  const tr = G.seq[G.t], cell = $("#c" + CELLS[tr.pos]);
+  const col = G.mods.includes("col"), shp = G.mods.includes("shp");
+  cell.innerHTML = `<i class="stim" style="background:${col ? COLORS[tr.col] : "var(--ink)"};clip-path:${shp ? SHAPES[tr.shp] : "none"}"></i>`;
+  if (G.mods.includes("snd")) sound(tr.snd);
+  $("#cnt").textContent = `${G.t + 1}/${G.len}`;
+  $("#pb").style.width = (G.t + 1) / G.len * 100 + "%";
+  G.hide = setTimeout(() => { cell.innerHTML = ""; }, Math.min(900, PERIOD * .45));
+  G.timer = setTimeout(next, PERIOD);
+}
+
+function press(m) {
+  if (!G || G.t < 0 || G.t >= G.len || G.press[m] || !G.st[m]) return;
+  G.press[m] = true;
+  const ok = isMatch(G.t, m);
+  if (ok) G.st[m].h++; else G.st[m].fa++;
+  const b = document.querySelector(`.r[data-m="${m}"]`);
+  if (b) b.classList.add(ok ? "ok" : "bad");
+}
+
+function finish() {
+  stopTimers();
+  const rows = G.defs.map(d => { const s = G.st[d[0]], tot = s.h + s.mi + s.fa; return { name: d[1], ...s, p: tot ? Math.round(100 * s.h / tot) : 100 }; });
+  const H = rows.reduce((a, r) => a + r.h, 0), M = rows.reduce((a, r) => a + r.mi, 0), F = rows.reduce((a, r) => a + r.fa, 0);
+  const score = H + M + F ? Math.round(100 * H / (H + M + F)) : 100;
+  const n = G.n, up = score >= 80 && n < 9, nx = up ? n + 1 : n;
+  S.level[S.mode] = nx;
+  S.hist.push({ mode: S.mode, n, score, t: Date.now() }); S.hist = S.hist.slice(-50); save();
+  app.innerHTML = `<h1>Resultado</h1><p class="sub">${NAME[S.mode]} ${n}-back</p>
+  <p class="big">${score}%</p>
+  <p>${up ? `Você subiu para ${nx}-back.` : score >= 80 ? "Nível máximo concluído." : `Continue no ${n}-back. Sobe com 80% ou mais.`}</p>
+  <table><tr><th></th><th>Acertos</th><th>Omissões</th><th>Falsos</th><th>%</th></tr>
+  ${rows.map(r => `<tr><td>${r.name}</td><td>${r.h}</td><td>${r.mi}</td><td>${r.fa}</td><td>${r.p}%</td></tr>`).join("")}</table>
+  <div class="btns"><button class="primary" id="again" style="margin:0">Jogar de novo</button><button id="home">Menu</button></div>`;
+  $("#again").onclick = start; $("#home").onclick = menu;
+  G = null;
+}
+
+document.addEventListener("keydown", e => {
+  if (!G) return;
+  if (e.key === "Escape") return menu();
+  const d = G.defs.find(x => x[2].toLowerCase() === e.key.toLowerCase());
+  if (d) press(d[0]);
+});
+menu();
+</script>
+</body>
+</html>
